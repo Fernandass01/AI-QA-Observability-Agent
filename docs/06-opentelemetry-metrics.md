@@ -233,3 +233,43 @@ The project now supports:
 ## Next Milestone
 
 The next phase is to add **Grafana** and a metrics backend so the custom QA metrics can be visualized in dashboards.
+## Dynamic Payment Simulation
+
+The application now simulates 10 payment transactions per execution.
+
+Each payment randomly succeeds or fails, allowing the observability
+pipeline to generate realistic QA telemetry.
+
+The simulation produces:
+
+- Total payment attempts
+- Total payment failures
+- Payment failure rate
+- Payment duration
+- Individual OpenTelemetry traces for each payment
+
+Example execution:
+
+- Payment attempts: 10
+- Payment failures: 3
+- Success rate: 70%
+- Failure rate: 30%
+
+## Prometheus and Grafana
+
+Prometheus scrapes metrics exposed by the OpenTelemetry Collector.
+
+Grafana uses Prometheus as its data source and displays the following
+QA observability metrics:
+
+- Payment Attempts
+- Payment Failures
+- Average Payment Duration
+- Payment Failure Rate
+
+Average payment duration is calculated with:
+
+```promql
+sum(payment_duration_ms_milliseconds_sum)
+/
+sum(payment_duration_ms_milliseconds_count)

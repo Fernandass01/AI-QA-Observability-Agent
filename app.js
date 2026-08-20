@@ -49,64 +49,87 @@ console.log("Test execution started");
 console.log("Test execution completed");
 
 // -------------------------
-// PAYMENT TEST + TRACE
+// PAYMENT TESTS + TRACES
 // -------------------------
 
 let paymentAttempts = 0;
 let paymentFailures = 0;
 
-const paymentSpan = tracer.startSpan("payment-test");
+const totalPaymentsToSimulate = 10;
 
-console.log("Payment test started");
+for (let i = 1; i <= totalPaymentsToSimulate; i++) {
+    const paymentSpan = tracer.startSpan(`payment-test-${i}`);
 
-const paymentStartTime = Date.now();
+    console.log(`Payment test ${i} started`);
 
-paymentAttempts++;
-paymentAttemptsCounter.add(1);
+    const paymentStartTime = Date.now();
 
-const paymentSuccessful = false;
+    paymentAttempts++;
+    paymentAttemptsCounter.add(1);
 
-paymentSpan.setAttribute(
-    "payment.attempts",
-    paymentAttempts
-);
+    // Simulate ~70% success rate
+    const paymentSuccessful = Math.random() < 0.7;
 
-paymentSpan.setAttribute(
-    "payment.successful",
-    paymentSuccessful
-);
-
-if (!paymentSuccessful) {
-    paymentFailures++;
-    paymentFailuresCounter.add(1);
-
-    console.error("ERROR: Payment failed");
+    // Simulate processing time
+    const simulatedDuration = Math.floor(
+        Math.random() * 400
+    ) + 100;
 
     paymentSpan.setAttribute(
-        "payment.failures",
-        paymentFailures
+        "payment.attempt.number",
+        i
     );
 
-    paymentSpan.setStatus({
-        code: SpanStatusCode.ERROR,
-        message: "Payment failed"
-    });
-}
+    paymentSpan.setAttribute(
+        "payment.successful",
+        paymentSuccessful
+    );
 
-console.log("Payment test completed");
+    if (!paymentSuccessful) {
+        paymentFailures++;
+        paymentFailuresCounter.add(1);
 
-const paymentDuration =
-    Date.now() - paymentStartTime;
+        console.error(
+            `ERROR: Payment ${i} failed`
+        );
 
-paymentDurationHistogram.record(
-    paymentDuration,
-    {
-        "payment.successful": paymentSuccessful,
+        paymentSpan.setAttribute(
+            "payment.failures.total",
+            paymentFailures
+        );
+
+        paymentSpan.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: "Payment failed"
+        });
+    } else {
+        console.log(
+            `Payment ${i} succeeded`
+        );
     }
-);
 
-paymentSpan.end();
+    const paymentDuration =
+        Date.now() - paymentStartTime +
+        simulatedDuration;
 
+    paymentDurationHistogram.record(
+        paymentDuration,
+        {
+            "payment.successful": paymentSuccessful,
+        }
+    );
+
+    paymentSpan.setAttribute(
+        "payment.duration_ms",
+        paymentDuration
+    );
+
+    paymentSpan.end();
+
+    console.log(
+        `Payment test ${i} completed`
+    );
+}
 // -------------------------
 // METRICS
 // -------------------------
