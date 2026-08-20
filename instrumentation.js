@@ -1,3 +1,12 @@
+const {
+    OTLPMetricExporter,
+} = require("@opentelemetry/exporter-metrics-otlp-proto");
+
+const {
+    PeriodicExportingMetricReader,
+} = require("@opentelemetry/sdk-metrics");
+
+
 const { NodeSDK } = require("@opentelemetry/sdk-node");
 const {
     getNodeAutoInstrumentations,
@@ -21,9 +30,22 @@ const traceExporter = new OTLPTraceExporter({
     url: "http://localhost:4318/v1/traces",
 });
 
+const metricExporter = new OTLPMetricExporter({
+    url: "http://localhost:4318/v1/metrics",
+});
+
+// Metric reader
+const metricReader = new PeriodicExportingMetricReader({
+    exporter: metricExporter,
+    exportIntervalMillis: 5000,
+});
+
+
+// SDK
 const sdk = new NodeSDK({
     resource,
     traceExporter,
+    metricReader,
     instrumentations: [getNodeAutoInstrumentations()],
 });
 
