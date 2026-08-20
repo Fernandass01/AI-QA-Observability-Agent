@@ -1,0 +1,235 @@
+# OpenTelemetry Metrics
+
+This document describes how real OpenTelemetry metrics were added to the AI QA Observability Agent.
+
+## Goal
+
+The project initially used manual counters printed with `console.log()`.
+
+Example:
+
+```text
+Payment attempts: 1
+Payment failures: 1
+Success rate: 0%
+```
+
+Those values are useful for learning, but they are not persistent telemetry.
+
+The goal of this milestone was to create real OpenTelemetry metrics that can be exported, collected, and later visualized in Grafana.
+
+## Metrics Exporter
+
+The OTLP metrics exporter was added with:
+
+```powershell
+npm install @opentelemetry/exporter-metrics-otlp-proto
+```
+
+The exporter sends metrics to the OpenTelemetry Collector:
+
+```javascript
+const metricExporter = new OTLPMetricExporter({
+    url: "http://localhost:4318/v1/metrics",
+});
+```
+
+## Periodic Metric Reader
+
+A periodic metric reader was configured:
+
+```javascript
+const metricReader = new PeriodicExportingMetricReader({
+    exporter: metricExporter,
+    exportIntervalMillis: 5000,
+});
+```
+
+The metric reader is passed into the NodeSDK:
+
+```javascript
+const sdk = new NodeSDK({
+    resource,
+    traceExporter,
+    metricReader,
+    instrumentations: [getNodeAutoInstrumentations()],
+});
+```
+
+## Collector Metrics Pipeline
+
+The OpenTelemetry Collector configuration was updated with a metrics pipeline:
+
+```yaml
+metrics:
+  receivers: [otlp]
+  processors: [batch]
+  exporters: [debug]
+```
+
+This allows the Collector to receive OTLP metrics and print them through the debug exporter.
+
+## Automatic Runtime Metrics
+
+OpenTelemetry also generated Node.js runtime metrics automatically.
+
+Examples included:
+
+```text
+v8js.memory.heap.space.physical_size
+v8js.memory.heap.space.available_size
+v8js.resource.active
+```
+
+These metrics describe runtime behavior such as memory usage and active event loop resources.
+
+## Custom QA Metrics
+
+Three custom metrics were added specifically for the simulated payment test.
+
+### Payment Attempts
+
+```javascript
+const paymentAttemptsCounter = meter.createCounter(
+    "payment_attempts_total",
+    {
+        description: "Total number of payment attempts",
+    }
+);
+```
+
+Each payment attempt increments the counter:
+
+```javascript
+paymentAttemptsCounter.add(1);
+```
+
+### Payment Failures
+
+```javascript
+const paymentFailuresCounter = meter.createCounter(
+    "payment_failures_total",
+    {
+        description: "Total number of failed payments",
+    }
+);
+```
+
+When the payment fails:
+
+```javascript
+paymentFailuresCounter.add(1);
+```
+
+### Payment Duration
+
+A histogram measures how long the payment operation takes:
+
+```javascript
+const paymentDurationHistogram = meter.createHistogram(
+    "payment_duration_ms",
+    {
+        description: "Payment operation duration",
+        unit: "ms",
+    }
+);
+```
+
+The operation duration is calculated:
+
+```javascript
+const paymentStartTime = Date.now();
+```
+
+and later:
+
+```javascript
+const paymentDuration =
+    Date.now() - paymentStartTime;
+```
+
+The duration is recorded with an attribute:
+
+```javascript
+paymentDurationHistogram.record(
+    paymentDuration,
+    {
+        "payment.successful": paymentSuccessful,
+    }
+);
+```
+
+## Verification
+
+The application was executed with:
+
+```powershell
+node app.js
+```
+
+The Collector was then searched for the custom metric names:
+
+```powershell
+docker logs otel-collector 2>&1 |
+Select-String "payment_attempts_total|payment_failures_total|payment_duration_ms"
+```
+
+The Collector confirmed all three custom metrics:
+
+```text
+Name: payment_attempts_total
+Name: payment_failures_total
+Name: payment_duration_ms
+```
+
+## Current Telemetry Architecture
+
+```text
+Node.js Application
+        |
+        v
+OpenTelemetry SDK
+   /             \
+  v               v
+Traces           Metrics
+  |               |
+  v               v
+OTLP Exporters
+   \             /
+        |
+        v
+OpenTelemetry Collector
+   |               |
+   v               v
+Jaeger           Debug Metrics
+```
+
+## Why This Matters for QA
+
+These metrics allow a QA observability system to measure:
+
+* Number of test/payment attempts
+* Number of failures
+* Failure rate
+* Operation duration
+* Performance changes over time
+
+Later, these measurements can be visualized in Grafana and combined with traces and logs for AI-assisted root-cause analysis.
+
+## Milestone Completed
+
+The project now supports:
+
+* OpenTelemetry traces
+* Custom spans
+* Error status
+* OpenTelemetry metrics
+* Custom counters
+* Custom histograms
+* Node.js runtime metrics
+* OTLP export
+* OpenTelemetry Collector pipelines for traces and metrics
+
+## Next Milestone
+
+The next phase is to add **Grafana** and a metrics backend so the custom QA metrics can be visualized in dashboards.
