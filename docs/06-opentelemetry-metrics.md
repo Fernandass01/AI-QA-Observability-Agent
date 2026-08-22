@@ -273,3 +273,22 @@ Average payment duration is calculated with:
 sum(payment_duration_ms_milliseconds_sum)
 /
 sum(payment_duration_ms_milliseconds_count)
+## Grafana Alerting
+
+Grafana alerting is configured to automatically detect high payment
+failure rates.
+
+### Alert Rule
+
+Alert name:
+
+High Payment Failure Rate
+
+The alert uses the following PromQL query:
+
+```promql
+(
+  last_over_time(payment_failures_total[6h])
+  /
+  last_over_time(payment_attempts_total[6h])
+) * 100
