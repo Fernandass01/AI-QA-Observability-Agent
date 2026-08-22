@@ -324,3 +324,45 @@ QA Pass Rate is calculated using:
 
 ```promql
 (qa_tests_passed_total / qa_tests_total) * 100
+
+## Playwright Test Observability
+
+The project now integrates real Playwright automated tests with the OpenTelemetry observability pipeline.
+
+### Architecture
+
+Playwright Tests → Custom Observability Reporter → OpenTelemetry → OpenTelemetry Collector → Prometheus → Grafana
+
+### Playwright Metrics
+
+The custom Playwright reporter exports:
+
+- `playwright_tests_total` — Total Playwright tests executed
+- `playwright_tests_passed_total` — Total passed tests
+- `playwright_tests_failed_total` — Total failed tests
+- `playwright_test_duration_ms` — Playwright test execution duration
+
+Metrics include attributes such as test name and test status.
+
+### Grafana Dashboard
+
+Dashboard: `Playwright Test Observability Dashboard`
+
+The dashboard displays:
+
+- Total tests
+- Passed tests
+- Failed tests
+- Pass rate
+- Average test duration
+
+### Validation
+
+The integration was validated with two real Playwright test executions:
+
+- Total: 2
+- Passed: 1
+- Failed: 1
+- Pass rate: 50%
+
+Both PASS and FAIL results were exported through OpenTelemetry, verified in Prometheus, and visualized in Grafana.
