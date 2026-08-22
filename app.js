@@ -48,6 +48,119 @@ console.log("User:", user);
 console.log("Test execution started");
 console.log("Test execution completed");
 
+const qaTestsTotalCounter = meter.createCounter(
+    "qa_tests_total",
+    {
+        description: "Total number of QA tests executed",
+    }
+);
+
+const qaTestsPassedCounter = meter.createCounter(
+    "qa_tests_passed_total",
+    {
+        description: "Total number of QA tests passed",
+    }
+);
+
+const qaTestsFailedCounter = meter.createCounter(
+    "qa_tests_failed_total",
+    {
+        description: "Total number of QA tests failed",
+    }
+);
+
+const qaTestDurationHistogram = meter.createHistogram(
+    "qa_test_duration_ms",
+    {
+        description: "QA test execution duration",
+        unit: "ms",
+    }
+);
+// -------------------------
+// QA TEST SUITE SIMULATION
+// -------------------------
+
+let qaTestsTotal = 0;
+let qaTestsPassed = 0;
+let qaTestsFailed = 0;
+
+const qaTestSuite = [
+    "Login Test",
+    "Checkout Test",
+    "Payment Test",
+    "Search Test",
+    "Profile Update Test"
+];
+
+for (const testName of qaTestSuite) {
+    const testSpan = tracer.startSpan(`qa-${testName}`);
+
+    const startTime = Date.now();
+
+    qaTestsTotal++;
+    qaTestsTotalCounter.add(1);
+
+    const testPassed = Math.random() < 0.8;
+
+    const simulatedDuration =
+        Math.floor(Math.random() * 500) + 100;
+
+    if (testPassed) {
+        qaTestsPassed++;
+        qaTestsPassedCounter.add(1);
+
+        console.log(`PASS: ${testName}`);
+    } else {
+        qaTestsFailed++;
+        qaTestsFailedCounter.add(1);
+
+        console.error(`FAIL: ${testName}`);
+
+        testSpan.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: `${testName} failed`
+        });
+    }
+
+    const testDuration =
+        Date.now() - startTime + simulatedDuration;
+
+    qaTestDurationHistogram.record(
+        testDuration,
+        {
+            "test.name": testName,
+            "test.passed": testPassed,
+        }
+    );
+
+    testSpan.setAttribute(
+        "test.name",
+        testName
+    );
+
+    testSpan.setAttribute(
+        "test.passed",
+        testPassed
+    );
+
+    testSpan.setAttribute(
+        "test.duration_ms",
+        testDuration
+    );
+
+    testSpan.end();
+}
+
+const qaPassRate =
+    (qaTestsPassed / qaTestsTotal) * 100;
+
+console.log("----- QA TEST METRICS -----");
+console.log("Total tests:", qaTestsTotal);
+console.log("Passed tests:", qaTestsPassed);
+console.log("Failed tests:", qaTestsFailed);
+console.log("Pass rate:", qaPassRate + "%");
+
+
 // -------------------------
 // PAYMENT TESTS + TRACES
 // -------------------------

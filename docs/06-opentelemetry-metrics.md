@@ -292,3 +292,35 @@ The alert uses the following PromQL query:
   /
   last_over_time(payment_attempts_total[6h])
 ) * 100
+
+## QA Test Observability Dashboard
+
+A dedicated Grafana dashboard was created to monitor automated QA test execution.
+
+Dashboard name:
+
+AI QA Test Observability Dashboard
+
+### QA Metrics
+
+The application exports the following OpenTelemetry metrics:
+
+- `qa_tests_total` - Total number of QA tests executed
+- `qa_tests_passed_total` - Total number of passed QA tests
+- `qa_tests_failed_total` - Total number of failed QA tests
+- `qa_test_duration_ms` - QA test execution duration
+
+### Grafana Panels
+
+The dashboard contains five QA observability panels:
+
+- QA Tests - Total
+- Passed Tests
+- Failed Tests
+- QA Pass Rate
+- Average QA Test Duration
+
+QA Pass Rate is calculated using:
+
+```promql
+(qa_tests_passed_total / qa_tests_total) * 100
