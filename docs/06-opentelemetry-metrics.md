@@ -366,3 +366,53 @@ The integration was validated with two real Playwright test executions:
 - Pass rate: 50%
 
 Both PASS and FAIL results were exported through OpenTelemetry, verified in Prometheus, and visualized in Grafana.
+
+## Playwright Tracing with Jaeger
+
+Playwright test execution is now traced with OpenTelemetry and visualized in Jaeger.
+
+Each Playwright test creates an OpenTelemetry span with attributes including:
+
+- Test name
+- Test status
+- Test duration
+
+Passing tests are marked with an OK span status.
+
+Failing tests are marked with an ERROR span status.
+
+### Exception Capture
+
+When a Playwright test fails, the reporter records the actual Playwright exception using OpenTelemetry.
+
+This allows Jaeger to display:
+
+- Exception event
+- Exception message
+- Exception stack trace
+- Test failure details
+
+Example failure:
+
+- Test: Intentional failing test for observability
+- Expected title: Wrong Title
+- Received title: Example Domain
+- Span status: ERROR
+
+### Trace Verification
+
+Jaeger successfully displayed separate traces for:
+
+- `playwright-test: Example homepage loads successfully`
+- `playwright-test: Intentional failing test for observability`
+
+The failed trace included the Playwright exception details, allowing the failure cause to be investigated directly from the observability platform.
+
+### Observability Flow
+
+Playwright Tests → Custom Reporter → OpenTelemetry → OpenTelemetry Collector
+
+From the collector:
+
+- Metrics → Prometheus → Grafana
+- Traces and Exceptions → Jaeger

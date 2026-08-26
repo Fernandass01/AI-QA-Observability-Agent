@@ -1,7 +1,16 @@
 const sdk = require("./instrumentation");
-const { metrics } = require("@opentelemetry/api");
+
+const {
+    metrics,
+    trace,
+    SpanStatusCode,
+} = require("@opentelemetry/api");
 
 const meter = metrics.getMeter(
+    "playwright-observability-reporter"
+);
+
+const tracer = trace.getTracer(
     "playwright-observability-reporter"
 );
 
@@ -38,6 +47,33 @@ class ObservabilityReporter {
 
     onTestEnd(test, result) {
 
+        // -------------------------
+        // TRACE
+        // -------------------------
+
+        const testSpan = tracer.startSpan(
+            `playwright-test: ${test.title}`
+        );
+
+        testSpan.setAttribute(
+            "test.name",
+            test.title
+        );
+
+        testSpan.setAttribute(
+            "test.status",
+            result.status
+        );
+
+        testSpan.setAttribute(
+            "test.duration_ms",
+            result.duration
+        );
+
+        // -------------------------
+        // METRICS
+        // -------------------------
+
         testsTotalCounter.add(1, {
             "test.name": test.title,
         });
@@ -46,6 +82,10 @@ class ObservabilityReporter {
 
             testsPassedCounter.add(1, {
                 "test.name": test.title,
+            });
+
+            testSpan.setStatus({
+                code: SpanStatusCode.OK,
             });
 
             console.log(
@@ -59,6 +99,19 @@ class ObservabilityReporter {
                 "test.status": result.status,
             });
 
+            testSpan.setStatus({
+                code: SpanStatusCode.ERROR,
+                message: `Playwright test failed: ${test.title}`,
+            });
+            if (result.error) {
+               testSpan.recordException(result.error);
+
+               testSpan.setAttribute(
+                "test.error.message",
+                result.error.message || "Unknown Playwright error"
+    );
+}
+
             console.log(
                 `[OTEL] FAIL: ${test.title}`
             );
@@ -71,6 +124,9 @@ class ObservabilityReporter {
                 "test.status": result.status,
             }
         );
+
+        // End the span after all attributes/status are recorded
+        testSpan.end();
     }
 
     async onEnd() {
