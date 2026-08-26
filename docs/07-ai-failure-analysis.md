@@ -77,3 +77,24 @@ Example:
   "actual": "Page title was 'Example Domain'.",
   "suggestedAction": "Update the assertion to use the correct title or retain the mismatch if the failure is intentional for observability validation."
 }
+## Automated AI Failure Analysis Workflow
+
+The Playwright and AI failure-analysis workflow can now be executed using a single npm command.
+
+### Command
+
+```powershell
+npm run qa:ai
+```
+
+The command is defined in `package.json`:
+
+
+```json
+{
+  "scripts": {
+    "test": "playwright test",
+    "qa:ai": "playwright test || node failure-analysis/analyze-failure.js"
+  }
+}
+```
