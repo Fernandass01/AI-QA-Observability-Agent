@@ -1,5 +1,12 @@
 node_modules/
+
 .env
+.env.local
+
 .vscode/
+
 test-results/
 playwright-report/
+
+failure-analysis/latest-failure.json
+failure-analysis/latest-analysis.json

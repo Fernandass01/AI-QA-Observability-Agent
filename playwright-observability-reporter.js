@@ -1,4 +1,10 @@
 const sdk = require("./instrumentation");
+const fs = require("fs");
+const path = require("path");
+
+function cleanAnsi(text = "") {
+    return text.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
+}
 
 const {
     metrics,
@@ -109,8 +115,35 @@ class ObservabilityReporter {
                testSpan.setAttribute(
                 "test.error.message",
                 result.error.message || "Unknown Playwright error"
+
+
+                
     );
 }
+const failureData = {
+    testName: test.title,
+    status: result.status,
+    durationMs: result.duration,
+    errorMessage: cleanAnsi(
+    result.error?.message || "Unknown Playwright error"
+),
+    timestamp: new Date().toISOString(),
+};
+
+const failureFile = path.join(
+    __dirname,
+    "failure-analysis",
+    "latest-failure.json"
+);
+
+fs.writeFileSync(
+    failureFile,
+    JSON.stringify(failureData, null, 2)
+);
+
+console.log(
+    `[AI-QA] Failure data saved: ${failureFile}`
+);
 
             console.log(
                 `[OTEL] FAIL: ${test.title}`
