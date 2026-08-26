@@ -29,6 +29,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run Playwright tests
+        id: playwright
         run: npx playwright test
         continue-on-error: true
 
@@ -37,3 +38,7 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: node failure-analysis/analyze-failure.js
+
+      - name: Fail workflow if Playwright tests failed
+        if: steps.playwright.outcome == 'failure'
+        run: exit 1
