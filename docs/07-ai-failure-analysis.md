@@ -286,3 +286,38 @@ The AI QA Observability Agent can now:
 ## Next Milestone
 
 The next milestone is CI/CD integration using GitHub Actions so the AI QA workflow can be executed automatically as part of the repository's continuous integration process.
+
+## GitHub Actions CI Integration
+
+The AI-powered Playwright failure-analysis workflow is integrated with GitHub Actions.
+
+The CI pipeline runs automatically on pushes and pull requests targeting the `main` branch.
+
+### CI Workflow
+
+The GitHub Actions workflow performs the following steps:
+
+1. Checks out the repository.
+2. Configures Node.js.
+3. Installs project dependencies.
+4. Installs Playwright Chromium.
+5. Executes the Playwright test suite.
+6. Continues execution when Playwright detects failures.
+7. Runs the AI failure analyzer using the OpenAI API.
+8. Preserves the original Playwright test result.
+9. Marks the CI workflow as failed when Playwright tests fail.
+
+### Secure OpenAI API Configuration
+
+The OpenAI API key is stored as a GitHub Actions repository secret:
+
+`OPENAI_API_KEY`
+
+The API key is injected into the AI analysis step at runtime and is not stored in the repository.
+
+### Failure Status Preservation
+
+The Playwright step uses:
+
+```yaml
+continue-on-error: true
