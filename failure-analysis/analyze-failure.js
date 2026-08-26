@@ -172,15 +172,20 @@ async function analyzeFailures() {
         `\n[AI-QA] ${analyses.length} analysis result(s) saved: ${analysesPath}`
     );
 
-    await sdk.shutdown();
+   try {
+        await sdk.shutdown();
 
-    console.log(
-        "[OTEL] AI analysis traces export complete"
-    );
+        console.log(
+            "[OTEL] AI analysis traces export complete"
+        );
+    } catch (error) {
+        console.warn(
+            "[OTEL] Trace export unavailable. AI analysis completed successfully."
+        );
+    }
 }
 
 analyzeFailures().catch((error) => {
-
     console.error(
         "AI analysis failed:",
         error.message
