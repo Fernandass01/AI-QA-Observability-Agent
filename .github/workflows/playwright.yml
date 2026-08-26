@@ -30,3 +30,10 @@ jobs:
 
       - name: Run Playwright tests
         run: npx playwright test
+        continue-on-error: true
+
+      - name: Run AI failure analysis
+        if: always()
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: node failure-analysis/analyze-failure.js
