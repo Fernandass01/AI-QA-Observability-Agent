@@ -97,4 +97,71 @@ The command is defined in `package.json`:
     "qa:ai": "playwright test || node failure-analysis/analyze-failure.js"
   }
 }
-```
+```## Multi-Failure AI Analysis
+
+The AI QA workflow now supports analyzing multiple Playwright failures from the same test execution.
+
+### Failure Collection
+
+Instead of storing only the latest failed test, the custom Playwright reporter collects all failures generated during the test run.
+
+The failures are saved to:
+
+`failure-analysis/failures.json`
+
+Each failure contains:
+
+- Test name
+- Status
+- Test duration
+- Error message
+- Timestamp
+
+### Multi-Failure Analysis
+
+The AI analyzer reads all entries from `failures.json` and processes each failed test individually using the OpenAI API.
+
+Each failure receives its own:
+
+- Failure category
+- Root cause
+- Expected result
+- Actual result
+- Suggested action
+
+The complete set of AI results is saved to:
+
+`failure-analysis/analyses.json`
+
+### Validation
+
+The workflow was validated with three Playwright tests:
+
+- 1 passing test
+- 2 intentional failing tests
+
+The two failures were:
+
+1. Page title assertion mismatch
+2. URL assertion mismatch
+
+The AI correctly analyzed both failures independently.
+
+Example result:
+
+- Total tests: 3
+- Passed: 1
+- Failed: 2
+- AI analyses generated: 2
+
+### OpenTelemetry Integration
+
+Each AI-generated failure analysis also creates its own OpenTelemetry span.
+
+Example operations:
+
+`ai-analysis: Intentional failing test for observability`
+
+`ai-analysis: Intentional URL failure for observability`
+
+This allows multiple AI root-cause analyses from the same Playwright run to be inspected individually in Jaeger.

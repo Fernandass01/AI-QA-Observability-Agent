@@ -9,10 +9,6 @@ const {
     SpanStatusCode,
 } = require("@opentelemetry/api");
 
-const tracer = trace.getTracer(
-    "ai-qa-failure-analyzer"
-);
-
 require("dotenv").config({
     path: path.join(__dirname, "..", ".env.local"),
 });
@@ -27,20 +23,20 @@ const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
 });
 
-const failurePath = path.join(
+const tracer = trace.getTracer(
+    "ai-qa-failure-analyzer"
+);
+
+const failuresPath = path.join(
     __dirname,
-    "latest-failure.json"
+    "failures.json"
 );
 
-const failure = JSON.parse(
-    fs.readFileSync(failurePath, "utf8")
+const failures = JSON.parse(
+    fs.readFileSync(failuresPath, "utf8")
 );
 
-async function analyzeFailure() {
-
-    console.log("\n==============================");
-    console.log("AI QA FAILURE ANALYSIS");
-    console.log("==============================");
+async function analyzeSingleFailure(failure) {
 
     const response = await openai.responses.create({
         model: "gpt-5.4",
@@ -74,70 +70,116 @@ Return ONLY valid JSON with this exact structure:
 `,
     });
 
-    const analysis = JSON.parse(
+    return JSON.parse(
         response.output_text
     );
-const analysisSpan = tracer.startSpan(
-    `ai-analysis: ${failure.testName}`
-);
+}
 
-analysisSpan.setAttribute(
-    "ai.failure.category",
-    analysis.failureCategory
-);
+async function analyzeFailures() {
 
-analysisSpan.setAttribute(
-    "ai.failure.root_cause",
-    analysis.rootCause
-);
+    console.log("\n==============================");
+    console.log("AI QA FAILURE ANALYSIS");
+    console.log("==============================");
 
-analysisSpan.setAttribute(
-    "ai.failure.expected",
-    analysis.expected
-);
+    const analyses = [];
 
-analysisSpan.setAttribute(
-    "ai.failure.actual",
-    analysis.actual
-);
+    for (const failure of failures) {
 
-analysisSpan.setAttribute(
-    "ai.failure.suggested_action",
-    analysis.suggestedAction
-);
+        console.log(
+            `\nAnalyzing: ${failure.testName}`
+        );
 
-analysisSpan.setStatus({
-    code: SpanStatusCode.OK,
-});
+        const analysis =
+            await analyzeSingleFailure(failure);
 
-analysisSpan.end();
+        const combinedResult = {
+            testName: failure.testName,
+            status: failure.status,
+            durationMs: failure.durationMs,
+            ...analysis,
+        };
 
+        analyses.push(combinedResult);
 
-    console.log(
-        JSON.stringify(analysis, null, 2)
-    );
+        console.log(
+            JSON.stringify(
+                combinedResult,
+                null,
+                2
+            )
+        );
 
-    const analysisPath = path.join(
+        // -------------------------
+        // AI ANALYSIS TRACE
+        // -------------------------
+
+        const analysisSpan = tracer.startSpan(
+            `ai-analysis: ${failure.testName}`
+        );
+
+        analysisSpan.setAttribute(
+            "ai.failure.test_name",
+            failure.testName
+        );
+
+        analysisSpan.setAttribute(
+            "ai.failure.category",
+            analysis.failureCategory
+        );
+
+        analysisSpan.setAttribute(
+            "ai.failure.root_cause",
+            analysis.rootCause
+        );
+
+        analysisSpan.setAttribute(
+            "ai.failure.expected",
+            analysis.expected
+        );
+
+        analysisSpan.setAttribute(
+            "ai.failure.actual",
+            analysis.actual
+        );
+
+        analysisSpan.setAttribute(
+            "ai.failure.suggested_action",
+            analysis.suggestedAction
+        );
+
+        analysisSpan.setStatus({
+            code: SpanStatusCode.OK,
+        });
+
+        analysisSpan.end();
+    }
+
+    const analysesPath = path.join(
         __dirname,
-        "latest-analysis.json"
+        "analyses.json"
     );
 
     fs.writeFileSync(
-        analysisPath,
-        JSON.stringify(analysis, null, 2)
+        analysesPath,
+        JSON.stringify(
+            analyses,
+            null,
+            2
+        )
     );
 
     console.log(
-        `\n[AI-QA] Analysis saved: ${analysisPath}`
+        `\n[AI-QA] ${analyses.length} analysis result(s) saved: ${analysesPath}`
     );
+
     await sdk.shutdown();
 
-console.log(
-    "[OTEL] AI analysis trace export complete"
-);
+    console.log(
+        "[OTEL] AI analysis traces export complete"
+    );
 }
 
-analyzeFailure().catch((error) => {
+analyzeFailures().catch((error) => {
 
     console.error(
         "AI analysis failed:",
@@ -145,7 +187,4 @@ analyzeFailure().catch((error) => {
     );
 
     process.exitCode = 1;
-
-    
 });
-

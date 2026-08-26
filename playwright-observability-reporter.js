@@ -1,16 +1,19 @@
 const sdk = require("./instrumentation");
+
 const fs = require("fs");
 const path = require("path");
-
-function cleanAnsi(text = "") {
-    return text.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
-}
 
 const {
     metrics,
     trace,
     SpanStatusCode,
 } = require("@opentelemetry/api");
+
+const failures = [];
+
+function cleanAnsi(text = "") {
+    return text.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
+}
 
 const meter = metrics.getMeter(
     "playwright-observability-reporter"
@@ -109,41 +112,39 @@ class ObservabilityReporter {
                 code: SpanStatusCode.ERROR,
                 message: `Playwright test failed: ${test.title}`,
             });
+
             if (result.error) {
-               testSpan.recordException(result.error);
+                testSpan.recordException(result.error);
 
-               testSpan.setAttribute(
-                "test.error.message",
-                result.error.message || "Unknown Playwright error"
+                testSpan.setAttribute(
+                    "test.error.message",
+                    cleanAnsi(
+                        result.error.message ||
+                        "Unknown Playwright error"
+                    )
+                );
+            }
 
+            // -------------------------
+            // FAILURE CAPTURE
+            // -------------------------
 
-                
-    );
-}
-const failureData = {
-    testName: test.title,
-    status: result.status,
-    durationMs: result.duration,
-    errorMessage: cleanAnsi(
-    result.error?.message || "Unknown Playwright error"
-),
-    timestamp: new Date().toISOString(),
-};
+            const failureData = {
+                testName: test.title,
+                status: result.status,
+                durationMs: result.duration,
+                errorMessage: cleanAnsi(
+                    result.error?.message ||
+                    "Unknown Playwright error"
+                ),
+                timestamp: new Date().toISOString(),
+            };
 
-const failureFile = path.join(
-    __dirname,
-    "failure-analysis",
-    "latest-failure.json"
-);
+            failures.push(failureData);
 
-fs.writeFileSync(
-    failureFile,
-    JSON.stringify(failureData, null, 2)
-);
-
-console.log(
-    `[AI-QA] Failure data saved: ${failureFile}`
-);
+            console.log(
+                `[AI-QA] Failure captured: ${test.title}`
+            );
 
             console.log(
                 `[OTEL] FAIL: ${test.title}`
@@ -158,11 +159,41 @@ console.log(
             }
         );
 
-        // End the span after all attributes/status are recorded
         testSpan.end();
     }
 
     async onEnd() {
+
+        // -------------------------
+        // SAVE ALL FAILURES
+        // -------------------------
+
+        if (failures.length > 0) {
+
+            const failureDirectory = path.join(
+                __dirname,
+                "failure-analysis"
+            );
+
+            fs.mkdirSync(
+                failureDirectory,
+                { recursive: true }
+            );
+
+            const failuresFile = path.join(
+                failureDirectory,
+                "failures.json"
+            );
+
+            fs.writeFileSync(
+                failuresFile,
+                JSON.stringify(failures, null, 2)
+            );
+
+            console.log(
+                `[AI-QA] ${failures.length} failure(s) saved: ${failuresFile}`
+            );
+        }
 
         console.log(
             "[OTEL] Playwright telemetry export complete"

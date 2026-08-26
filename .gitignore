@@ -10,3 +10,6 @@ playwright-report/
 
 failure-analysis/latest-failure.json
 failure-analysis/latest-analysis.json
+
+failure-analysis/failures.json
+failure-analysis/analyses.json
