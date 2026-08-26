@@ -11,6 +11,12 @@ const {
 
 const failures = [];
 
+const testSummary = {
+    total: 0,
+    passed: 0,
+    failed: 0,
+};
+
 function cleanAnsi(text = "") {
     return text.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
 }
@@ -57,6 +63,12 @@ class ObservabilityReporter {
     onTestEnd(test, result) {
 
         // -------------------------
+        // TEST SUMMARY
+        // -------------------------
+
+        testSummary.total++;
+
+        // -------------------------
         // TRACE
         // -------------------------
 
@@ -89,6 +101,8 @@ class ObservabilityReporter {
 
         if (result.status === "passed") {
 
+            testSummary.passed++;
+
             testsPassedCounter.add(1, {
                 "test.name": test.title,
             });
@@ -103,6 +117,8 @@ class ObservabilityReporter {
 
         } else {
 
+            testSummary.failed++;
+
             testsFailedCounter.add(1, {
                 "test.name": test.title,
                 "test.status": result.status,
@@ -114,6 +130,7 @@ class ObservabilityReporter {
             });
 
             if (result.error) {
+
                 testSpan.recordException(result.error);
 
                 testSpan.setAttribute(
@@ -165,20 +182,24 @@ class ObservabilityReporter {
     async onEnd() {
 
         // -------------------------
+        // FAILURE ANALYSIS DIRECTORY
+        // -------------------------
+
+        const failureDirectory = path.join(
+            __dirname,
+            "failure-analysis"
+        );
+
+        fs.mkdirSync(
+            failureDirectory,
+            { recursive: true }
+        );
+
+        // -------------------------
         // SAVE ALL FAILURES
         // -------------------------
 
         if (failures.length > 0) {
-
-            const failureDirectory = path.join(
-                __dirname,
-                "failure-analysis"
-            );
-
-            fs.mkdirSync(
-                failureDirectory,
-                { recursive: true }
-            );
 
             const failuresFile = path.join(
                 failureDirectory,
@@ -187,13 +208,43 @@ class ObservabilityReporter {
 
             fs.writeFileSync(
                 failuresFile,
-                JSON.stringify(failures, null, 2)
+                JSON.stringify(
+                    failures,
+                    null,
+                    2
+                )
             );
 
             console.log(
                 `[AI-QA] ${failures.length} failure(s) saved: ${failuresFile}`
             );
         }
+
+        // -------------------------
+        // SAVE TEST SUMMARY
+        // -------------------------
+
+        const summaryFile = path.join(
+            failureDirectory,
+            "test-summary.json"
+        );
+
+        fs.writeFileSync(
+            summaryFile,
+            JSON.stringify(
+                testSummary,
+                null,
+                2
+            )
+        );
+
+        console.log(
+            `[AI-QA] Test summary saved: ${summaryFile}`
+        );
+
+        // -------------------------
+        // SHUTDOWN
+        // -------------------------
 
         console.log(
             "[OTEL] Playwright telemetry export complete"

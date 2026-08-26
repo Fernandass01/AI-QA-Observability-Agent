@@ -13,3 +13,5 @@ failure-analysis/latest-analysis.json
 
 failure-analysis/failures.json
 failure-analysis/analyses.json
+
+failure-analysis/test-summary.json

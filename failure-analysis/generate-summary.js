@@ -17,9 +17,62 @@ const analyses = JSON.parse(
     fs.readFileSync(analysesPath, "utf8")
 );
 
-let markdown = `# 🤖 AI QA Failure Analysis
+const testSummaryPath = path.join(
+    __dirname,
+    "test-summary.json"
+);
 
-**Failures analyzed:** ${analyses.length}
+if (!fs.existsSync(testSummaryPath)) {
+    console.log(
+        "[AI-QA] No test-summary.json found. Summary skipped."
+    );
+    process.exit(0);
+}
+
+const testSummary = JSON.parse(
+    fs.readFileSync(testSummaryPath, "utf8")
+);
+
+const totalTests = testSummary.total;
+const passedTests = testSummary.passed;
+const failedTests = testSummary.failed;
+
+const categoryCounts = {};
+
+for (const analysis of analyses) {
+    const category =
+        analysis.failureCategory || "Unknown";
+
+    categoryCounts[category] =
+        (categoryCounts[category] || 0) + 1;
+}
+
+let markdown = `# 🤖 AI QA Test Report
+
+## Executive Summary
+
+| Metric | Result |
+| --- | ---: |
+| Total Tests | ${totalTests} |
+| Passed | ${passedTests} |
+| Failed | ${failedTests} |
+| AI Analyses | ${analyses.length} |
+| CI Status | ❌ FAILED |
+
+## Failure Categories
+
+| Category | Count |
+| --- | ---: |
+`;
+
+for (const [category, count] of Object.entries(categoryCounts)) {
+    markdown += `| ${category} | ${count} |\n`;
+}
+
+markdown += `
+---
+
+# Failure Details
 
 `;
 
@@ -28,7 +81,7 @@ analyses.forEach((analysis, index) => {
 
 | Field | Result |
 | --- | --- |
-| Status | ${analysis.status} |
+| Status | ❌ ${analysis.status} |
 | Duration | ${analysis.durationMs} ms |
 | Failure Category | ${analysis.failureCategory} |
 
@@ -53,7 +106,8 @@ ${analysis.suggestedAction}
 `;
 });
 
-const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+const summaryPath =
+    process.env.GITHUB_STEP_SUMMARY;
 
 if (summaryPath) {
     fs.appendFileSync(
