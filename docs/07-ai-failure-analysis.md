@@ -4,46 +4,44 @@
 
 This project extends Playwright test automation with AI-powered failure analysis and OpenTelemetry observability.
 
-When a Playwright test fails, the custom reporter captures structured failure information. The failure is analyzed using the OpenAI API, and the resulting diagnosis is stored as structured JSON and exported as an OpenTelemetry trace to Jaeger.
+When Playwright tests fail, the custom observability reporter captures structured failure information. The failures are analyzed using the OpenAI API, and the resulting diagnoses are stored as structured JSON and exported as OpenTelemetry traces to Jaeger.
+
+The workflow supports multiple failures from the same Playwright test execution.
 
 ## Architecture
 
-Playwright Test
-    |
-    v
+```text
+Playwright Test Suite
+        |
+        v
 Custom Observability Reporter
-    |
-    +--> OpenTelemetry Metrics
-    |       |
-    |       v
-    |    Prometheus
-    |       |
-    |       v
-    |     Grafana
-    |
-    +--> OpenTelemetry Traces
-    |       |
-    |       v
-    |     Jaeger
-    |
-    +--> Failure JSON
-            |
-            v
-        OpenAI API
-            |
-            v
-      AI Failure Analysis
-            |
-            +--> latest-analysis.json
-            |
-            +--> OpenTelemetry AI Analysis Span
-                        |
-                        v
-                      Jaeger
+        |
+        +----------------------+
+        |                      |
+        v                      v
+OpenTelemetry             Failure Capture
+        |                      |
+   +----+----+                 v
+   |         |            failures.json
+   v         v                 |
+Metrics    Traces              v
+   |         |             OpenAI API
+   v         v                 |
+Prometheus Jaeger              v
+   |                      AI Failure Analysis
+   v                           |
+Grafana                   +----+----+
+                          |         |
+                          v         v
+                    analyses.json  OpenTelemetry
+                                      |
+                                      v
+                                    Jaeger
+```
 
 ## Failure Capture
 
-When a Playwright test fails, the custom reporter captures information such as:
+When a Playwright test fails, the custom reporter captures information including:
 
 - Test name
 - Test status
@@ -51,15 +49,17 @@ When a Playwright test fails, the custom reporter captures information such as:
 - Error message
 - Timestamp
 
-The information is stored in:
+All failures from the same Playwright execution are collected and saved to:
 
-`failure-analysis/latest-failure.json`
+`failure-analysis/failures.json`
+
+This allows the system to process multiple failures instead of storing only the most recent failure.
 
 ## AI Failure Analysis
 
-The failure analyzer sends the structured Playwright failure information to the OpenAI API.
+The AI analyzer reads the failures from `failures.json` and processes each failed test individually using the OpenAI API.
 
-The AI analyzes the failure and returns structured information containing:
+For every failure, the AI returns structured information containing:
 
 - Failure category
 - Root cause
@@ -71,15 +71,49 @@ Example:
 
 ```json
 {
+  "testName": "Intentional failing test for observability",
+  "status": "failed",
+  "durationMs": 5201,
   "failureCategory": "AssertionError",
-  "rootCause": "The test contains an intentionally incorrect title assertion.",
-  "expected": "Page title should be 'Wrong Title'.",
-  "actual": "Page title was 'Example Domain'.",
-  "suggestedAction": "Update the assertion to use the correct title or retain the mismatch if the failure is intentional for observability validation."
+  "rootCause": "The expected page title does not match the actual page title.",
+  "expected": "Page title should be \"Wrong Title\".",
+  "actual": "Page title was \"Example Domain\".",
+  "suggestedAction": "Update the expected title if the test should pass, or retain the mismatch if the failure is intentional for observability validation."
 }
+```
+
+## Structured AI Output
+
+All AI-generated failure analyses are saved to:
+
+`failure-analysis/analyses.json`
+
+Using structured JSON makes the AI diagnoses reusable by observability tools, reports, CI/CD workflows, and future automation.
+
+## OpenTelemetry AI Traces
+
+Each AI-generated failure analysis creates its own OpenTelemetry span.
+
+Example operations:
+
+`ai-analysis: Intentional failing test for observability`
+
+`ai-analysis: Intentional URL failure for observability`
+
+Each span contains attributes such as:
+
+- `ai.failure.test_name`
+- `ai.failure.category`
+- `ai.failure.root_cause`
+- `ai.failure.expected`
+- `ai.failure.actual`
+- `ai.failure.suggested_action`
+
+The AI-generated root-cause information can therefore be inspected directly in Jaeger.
+
 ## Automated AI Failure Analysis Workflow
 
-The Playwright and AI failure-analysis workflow can now be executed using a single npm command.
+The complete Playwright and AI failure-analysis workflow can be executed using a single npm command.
 
 ### Command
 
@@ -89,7 +123,6 @@ npm run qa:ai
 
 The command is defined in `package.json`:
 
-
 ```json
 {
   "scripts": {
@@ -97,29 +130,51 @@ The command is defined in `package.json`:
     "qa:ai": "playwright test || node failure-analysis/analyze-failure.js"
   }
 }
-```## Multi-Failure AI Analysis
+```
 
-The AI QA workflow now supports analyzing multiple Playwright failures from the same test execution.
+The Playwright test suite intentionally contains failing observability tests. When Playwright returns a non-zero exit status, the AI analyzer runs and processes the captured failures.
 
-### Failure Collection
+## Automated Execution Flow
 
-Instead of storing only the latest failed test, the custom Playwright reporter collects all failures generated during the test run.
+```text
+npm run qa:ai
+      |
+      v
+Playwright Tests
+      |
+      +---- PASS ----> Metrics + Traces
+      |
+      +---- FAIL
+              |
+              v
+       Custom Reporter
+              |
+              v
+         failures.json
+              |
+              v
+         AI Analyzer
+              |
+              v
+         OpenAI API
+              |
+              v
+       AI QA Analyses
+          /        \
+         v          v
+ analyses.json   OpenTelemetry
+                     |
+                     v
+                   Jaeger
+```
 
-The failures are saved to:
+## Multi-Failure AI Analysis
 
-`failure-analysis/failures.json`
+The workflow supports analyzing multiple Playwright failures from the same test execution.
 
-Each failure contains:
+The custom reporter collects every failure during the run and writes the complete collection to `failures.json`.
 
-- Test name
-- Status
-- Test duration
-- Error message
-- Timestamp
-
-### Multi-Failure Analysis
-
-The AI analyzer reads all entries from `failures.json` and processes each failed test individually using the OpenAI API.
+The AI analyzer then loops through the collection and analyzes each failure independently.
 
 Each failure receives its own:
 
@@ -128,40 +183,106 @@ Each failure receives its own:
 - Expected result
 - Actual result
 - Suggested action
+- OpenTelemetry AI-analysis span
 
-The complete set of AI results is saved to:
+## End-to-End Validation
 
-`failure-analysis/analyses.json`
+The complete multi-failure workflow was validated with three Playwright tests.
 
-### Validation
-
-The workflow was validated with three Playwright tests:
-
-- 1 passing test
-- 2 intentional failing tests
-
-The two failures were:
-
-1. Page title assertion mismatch
-2. URL assertion mismatch
-
-The AI correctly analyzed both failures independently.
-
-Example result:
+### Test Results
 
 - Total tests: 3
 - Passed: 1
 - Failed: 2
+- Failures captured: 2
 - AI analyses generated: 2
 
-### OpenTelemetry Integration
+The intentional failures represented two different scenarios:
 
-Each AI-generated failure analysis also creates its own OpenTelemetry span.
+1. Page title assertion mismatch
+2. Page URL assertion mismatch
 
-Example operations:
+The AI successfully analyzed both failures independently.
 
-`ai-analysis: Intentional failing test for observability`
+For the title failure, the AI identified the mismatch between:
 
-`ai-analysis: Intentional URL failure for observability`
+```text
+Expected: Wrong Title
+Actual: Example Domain
+```
 
-This allows multiple AI root-cause analyses from the same Playwright run to be inspected individually in Jaeger.
+For the URL failure, the AI identified the mismatch between:
+
+```text
+Expected: https://wrong-example.com/
+Actual: https://example.com/
+```
+
+The complete validation was executed using only:
+
+```powershell
+npm run qa:ai
+```
+
+The workflow successfully:
+
+1. Executed the Playwright test suite.
+2. Recorded passing and failing test telemetry.
+3. Captured two independent failures.
+4. Saved the failures as structured JSON.
+5. Automatically started the AI analyzer.
+6. Generated two independent AI diagnoses.
+7. Saved the analyses as structured JSON.
+8. Created OpenTelemetry spans for the AI diagnoses.
+9. Exported the AI-analysis traces for inspection in Jaeger.
+
+## Observability Stack
+
+The project currently integrates:
+
+- Playwright — automated browser testing
+- OpenTelemetry — telemetry instrumentation
+- Prometheus — metrics collection and querying
+- Grafana — test observability dashboards
+- Jaeger — distributed tracing and failure inspection
+- OpenAI API — AI-powered failure analysis
+
+## Security
+
+The OpenAI API key is stored locally in:
+
+`.env.local`
+
+The environment file is excluded from Git using `.gitignore`.
+
+Generated runtime data is also excluded from Git:
+
+```text
+failure-analysis/failures.json
+failure-analysis/analyses.json
+```
+
+API credentials must never be committed to the repository.
+
+## Current Capabilities
+
+The AI QA Observability Agent can now:
+
+1. Execute Playwright automated tests.
+2. Capture passed and failed test metrics.
+3. Export telemetry using OpenTelemetry.
+4. Visualize test metrics in Grafana.
+5. Generate Playwright test traces.
+6. Record exceptions from failed tests.
+7. Capture multiple failures from one test execution.
+8. Store failure information as structured JSON.
+9. Analyze multiple failures using the OpenAI API.
+10. Generate structured AI root-cause analyses.
+11. Save multiple AI analyses as structured JSON.
+12. Create individual OpenTelemetry spans for AI diagnoses.
+13. Inspect AI-generated failure information in Jaeger.
+14. Execute the complete local AI QA workflow with `npm run qa:ai`.
+
+## Next Milestone
+
+The next milestone is CI/CD integration using GitHub Actions so the AI QA workflow can be executed automatically as part of the repository's continuous integration process.
