@@ -38,7 +38,23 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: node failure-analysis/analyze-failure.js
+      - name: Upload Playwright test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: test-results/
+          if-no-files-found: ignore
 
+      - name: Upload AI failure data
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-failure-analysis
+          path: |
+            failure-analysis/failures.json
+            failure-analysis/analyses.json
+          if-no-files-found: ignore
       - name: Fail workflow if Playwright tests failed
         if: steps.playwright.outcome == 'failure'
         run: exit 1
