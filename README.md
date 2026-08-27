@@ -2,7 +2,7 @@
 
 An end-to-end QA engineering project combining **Test Automation, Observability, OpenTelemetry, Distributed Tracing, Metrics, Grafana, CI/CD, and AI-powered failure analysis**.
 
-The project demonstrates how automated tests can generate telemetry, capture failures, analyze those failures with AI, visualize QA metrics, and publish actionable QA reports directly inside a CI/CD pipeline.
+The project demonstrates how automated tests can generate telemetry, capture failures, analyze those failures with AI, visualize QA metrics, propose corrective actions, safely validate proposed fixes, and publish actionable QA reports inside a CI/CD pipeline.
 
 ---
 
@@ -22,6 +22,10 @@ The system can:
 - Identify probable root causes
 - Compare expected vs. actual behavior
 - Suggest corrective actions
+- Generate structured proposed fixes
+- Validate proposed fixes using temporary test copies
+- Automatically retest proposed corrections
+- Preserve the original source tests
 - Generate dynamic QA reports
 - Run automatically through GitHub Actions
 - Preserve test and AI-analysis artifacts
@@ -51,13 +55,16 @@ The system can:
 OpenTelemetry Collector         analyses.json
        |            |                 |
        v            v                 v
-  Prometheus      Jaeger          AI QA Report
+  Prometheus      Jaeger        Proposed Fix
        |                              |
        v                              v
-    Grafana                  GitHub Actions Summary
+    Grafana                  Temporary Test Copy
                                       |
                                       v
-                                 CI Artifacts
+                              Playwright Retest
+                                      |
+                                      v
+                              Validation Result
 ```
 
 ---
@@ -225,7 +232,7 @@ Playwright Pass Rate: 33.3%
 Average Playwright Test Duration: 4.43 s
 ```
 
-This creates a visual QA observability layer on top of the automated test telemetry.
+This creates a visual QA observability layer on top of automated test telemetry.
 
 ---
 
@@ -249,8 +256,6 @@ playwright-test: Intentional URL failure for observability
 Status: ERROR
 ```
 
-Error information can also be attached to the span, allowing failed automated tests to be investigated through observability tooling.
-
 AI-generated failure analysis is also exported as trace data.
 
 Example:
@@ -259,16 +264,18 @@ Example:
 ai-analysis: Intentional failing test for observability
 ```
 
-AI-analysis traces can contain structured attributes including:
+AI-analysis traces contain structured attributes including:
 
 ```text
 ai.failure.category
 ai.failure.root_cause
 ai.failure.expected
 ai.failure.actual
+ai.failure.suggested_action
+ai.failure.proposed_fix
 ```
 
-This allows AI investigation results to become part of the observability evidence.
+This allows AI investigation results and proposed corrections to become part of the observability evidence.
 
 ---
 
@@ -311,7 +318,8 @@ The AI returns structured information for each failure:
   "rootCause": "",
   "expected": "",
   "actual": "",
-  "suggestedAction": ""
+  "suggestedAction": "",
+  "proposedFix": ""
 }
 ```
 
@@ -319,10 +327,10 @@ Example analysis:
 
 ```text
 Failure Category:
-AssertionError
+Assertion failure
 
 Root Cause:
-The test intentionally asserts an incorrect page title.
+The test asserts an incorrect expected page title.
 
 Expected:
 Page title should be "Wrong Title".
@@ -331,11 +339,106 @@ Actual:
 Page title was "Example Domain".
 
 Suggested Action:
-Update the assertion to use the correct expected title,
-or keep the failure intentionally for observability validation.
+Review and correct the expected assertion.
+
+Proposed Fix:
+Change the expected title from "Wrong Title"
+to "Example Domain".
 ```
 
 Multiple failures can be analyzed during the same test execution.
+
+---
+
+# 🧪 AI Proposed Fix Validation
+
+The project includes a controlled validation workflow for AI-proposed fixes.
+
+Instead of automatically modifying the real Playwright test suite, the system:
+
+1. Reads the AI-generated `proposedFix`.
+2. Creates a temporary copy of the Playwright test.
+3. Applies the proposed assertion correction only to the temporary copy.
+4. Runs Playwright against the temporary validation test.
+5. Reports whether the proposed fix passes.
+6. Leaves the original source test unchanged.
+
+The validation flow is:
+
+```text
+Playwright Failure
+      |
+      v
+AI Root-Cause Analysis
+      |
+      v
+AI Proposed Fix
+      |
+      v
+Temporary Patched Test
+      |
+      v
+Automated Playwright Retest
+      |
+      v
+Validation Result
+      |
+      +---- PASS ----> Proposed fix validated
+      |
+      +---- FAIL ----> Manual review required
+```
+
+Example validated corrections:
+
+```text
+Title assertion:
+
+"Wrong Title"
+      |
+      v
+"Example Domain"
+```
+
+```text
+URL assertion:
+
+"https://wrong-example.com/"
+      |
+      v
+"https://example.com/"
+```
+
+The temporary validation run successfully produced:
+
+```text
+Running 3 tests using 1 worker
+
+3 passed
+```
+
+The system also confirmed:
+
+```text
+AI proposed fixes passed the temporary Playwright validation.
+
+The original test suite remains unchanged.
+```
+
+The validation logic is implemented in:
+
+```text
+failure-analysis/validate-proposed-fix.js
+```
+
+Temporary validation tests are generated under:
+
+```text
+tests/ai-validation/
+```
+
+and excluded from Git using `.gitignore`.
+
+This creates a safer **human-in-the-loop AI QA workflow** where AI can recommend and validate a potential correction without silently editing the real source tests.
 
 ---
 
@@ -357,7 +460,9 @@ AI Analyses: 2
 CI Status: FAILED
 ```
 
-The report also groups failures by category:
+The report also groups failures by category.
+
+Example:
 
 ```text
 Failure Categories
@@ -393,7 +498,7 @@ Workflow:
 .github/workflows/playwright.yml
 ```
 
-Pipeline:
+Current CI pipeline:
 
 ```text
 Checkout Repository
@@ -437,7 +542,7 @@ This allows the pipeline to preserve diagnostic information before returning the
 
 # 📦 CI Artifacts
 
-GitHub Actions automatically preserves QA evidence from each execution.
+GitHub Actions preserves QA evidence from each execution.
 
 Current artifacts include:
 
@@ -453,7 +558,7 @@ failure-analysis/failures.json
 failure-analysis/analyses.json
 ```
 
-This allows failure evidence and AI-generated analysis to be downloaded after the CI execution.
+This allows failure evidence and AI-generated analysis to be inspected after CI execution.
 
 ---
 
@@ -541,6 +646,8 @@ This initial experiment evolved into the current automated QA observability and 
 - AI-powered failure classification
 - Root-cause analysis
 - Suggested corrective actions
+- Structured proposed fixes
+- AI proposed-fix validation
 
 ## CI/CD
 
@@ -577,7 +684,8 @@ AI-QA-Observability-Agent/
 │
 ├── failure-analysis/
 │   ├── analyze-failure.js
-│   └── generate-summary.js
+│   ├── generate-summary.js
+│   └── validate-proposed-fix.js
 │
 ├── tests/
 │   └── example.spec.js
@@ -599,7 +707,9 @@ Runtime-generated files include:
 ```text
 failure-analysis/failures.json
 failure-analysis/analyses.json
+failure-analysis/test-summary.json
 test-results/
+tests/ai-validation/
 ```
 
 ---
@@ -683,12 +793,15 @@ test-results/
 
 ## Phase 8 — Advanced AI QA Agent
 
+- [x] Generate structured AI proposed fixes
+- [x] Export proposed fixes as OpenTelemetry attributes
+- [x] Create temporary patched validation tests
+- [x] Automatically retest AI-proposed fixes
+- [x] Preserve the original source test during validation
 - [ ] Correlate traces, metrics, and failures
 - [ ] Add historical failure analysis
 - [ ] Detect recurring failure patterns
-- [ ] Improve AI evidence collection
 - [ ] Generate automated investigation reports
-- [ ] Explore automated retesting after corrective actions
 
 ---
 
@@ -711,6 +824,8 @@ Examples include:
 - Handling intentionally failed tests in GitHub Actions
 - Preserving test evidence as CI artifacts
 - Configuring Prometheus and Grafana visualization
+- Cross-platform child-process execution for Playwright validation
+- Safe temporary test generation for AI-proposed fixes
 
 Troubleshooting is part of the project because observability is fundamentally about understanding and diagnosing system behavior.
 
@@ -754,6 +869,14 @@ Generate the QA summary:
 node failure-analysis/generate-summary.js
 ```
 
+Validate AI-proposed fixes safely:
+
+```bash
+node failure-analysis/validate-proposed-fix.js
+```
+
+The validation command creates a temporary corrected test and executes it without overwriting the original Playwright source test.
+
 ---
 
 # 🔐 Environment Variables
@@ -794,6 +917,10 @@ This project demonstrates practical experience with:
 - AI API integration
 - Structured AI outputs
 - AI-assisted root-cause analysis
+- AI-generated proposed fixes
+- Safe AI fix validation
+- Automated Playwright retesting
+- Human-in-the-loop AI workflows
 - Automated QA reporting
 - Observability-driven testing
 
@@ -860,17 +987,18 @@ OpenTelemetry          AI Analysis
       v                   v
 Observability        Root Cause
 Platform             Analysis
-      |                   |
-      +---------+---------+
-                |
-                v
-        AI QA Investigation
-                |
-                v
-         Suggested Action
-                |
-                v
-         Automated Retest
+                          |
+                          v
+                    Proposed Fix
+                          |
+                          v
+                 Temporary Validation
+                          |
+                          v
+                  Automated Retest
+                          |
+                          v
+                    Human Review
 ```
 
 ---
@@ -881,8 +1009,8 @@ Platform             Analysis
 
 ### Current milestone
 
-> Playwright automation, OpenTelemetry instrumentation, Prometheus metrics, Grafana dashboards, Jaeger tracing, AI-powered multi-failure analysis, GitHub Actions CI/CD, dynamic QA reporting, and CI artifact preservation are operational.
+> Playwright automation, OpenTelemetry instrumentation, Prometheus metrics, Grafana dashboards, Jaeger tracing, AI-powered multi-failure analysis, AI proposed-fix validation, safe automated retesting, GitHub Actions CI/CD, dynamic QA reporting, and CI artifact preservation are operational.
 
 ### Next milestone
 
-> Correlate traces, metrics, test failures, and historical execution data to evolve the project toward a more complete AI QA investigation agent.
+> Integrate the safe AI proposed-fix validation workflow into CI/CD and correlate traces, metrics, test failures, and validation results.
