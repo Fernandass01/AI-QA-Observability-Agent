@@ -416,3 +416,12 @@ From the collector:
 
 - Metrics → Prometheus → Grafana
 - Traces and Exceptions → Jaeger
+
+## Final Playwright Dashboard Validation
+
+The Grafana dashboards were updated to use the current Playwright metrics.
+
+### Total Tests
+
+```promql
+sum(playwright_tests_total)
