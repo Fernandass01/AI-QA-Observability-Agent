@@ -1,8 +1,8 @@
 # 🤖 AI QA Observability Agent
 
-An end-to-end QA engineering project combining **Test Automation, Observability, OpenTelemetry, Distributed Tracing, CI/CD, and AI-powered failure analysis**.
+An end-to-end QA engineering project combining **Test Automation, Observability, OpenTelemetry, Distributed Tracing, Metrics, Grafana, CI/CD, and AI-powered failure analysis**.
 
-The project demonstrates how automated tests can generate telemetry, capture failures, analyze those failures with AI, and publish actionable QA reports directly inside a CI/CD pipeline.
+The project demonstrates how automated tests can generate telemetry, capture failures, analyze those failures with AI, visualize QA metrics, and publish actionable QA reports directly inside a CI/CD pipeline.
 
 ---
 
@@ -17,6 +17,7 @@ The system can:
 - Generate OpenTelemetry traces and metrics
 - Record test execution duration
 - Export telemetry using OTLP
+- Visualize QA metrics in Grafana
 - Analyze failed tests using AI
 - Identify probable root causes
 - Compare expected vs. actual behavior
@@ -33,30 +34,30 @@ The system can:
                     GitHub Actions
                           |
                           v
-                   Playwright Tests
+                    Playwright Tests
                           |
               +-----------+-----------+
               |                       |
               v                       v
-      Custom QA Reporter        Test Failures
+      Custom QA Reporter         Test Failures
               |                       |
               v                       v
-       OpenTelemetry           failures.json
-        /         \                   |
-       /           \                  v
-   Metrics        Traces        OpenAI Analysis
-      |              |                 |
-      v              v                 v
-OpenTelemetry Collector        analyses.json
-      |              |                 |
-      v              v                 v
- Observability     Jaeger       AI QA Report
+       OpenTelemetry             failures.json
+         /       \                    |
+        /         \                   v
+    Metrics      Traces          AI Analysis
+       |            |                 |
+       v            v                 v
+OpenTelemetry Collector         analyses.json
+       |            |                 |
+       v            v                 v
+  Prometheus      Jaeger          AI QA Report
+       |                              |
+       v                              v
+    Grafana                  GitHub Actions Summary
                                       |
                                       v
-                             GitHub Actions Summary
-                                      |
-                                      v
-                                CI Artifacts
+                                 CI Artifacts
 ```
 
 ---
@@ -69,7 +70,9 @@ The current test suite contains three tests:
 
 ```text
 Example homepage loads successfully
+
 Intentional failing test for observability
+
 Intentional URL failure for observability
 ```
 
@@ -115,11 +118,8 @@ Example metrics:
 
 ```text
 playwright_tests_total
-
 playwright_tests_passed_total
-
 playwright_tests_failed_total
-
 playwright_test_duration_ms
 ```
 
@@ -157,8 +157,13 @@ OTLP Exporter
    v
 OpenTelemetry Collector
    |
-   v
-Jaeger
+   +----------------+
+   |                |
+   v                v
+Jaeger          Prometheus
+                    |
+                    v
+                 Grafana
 ```
 
 OpenTelemetry captures test execution information including:
@@ -184,9 +189,9 @@ SpanStatusCode.OK
 
 ---
 
-# 📊 Metrics
+# 📊 Metrics & Grafana
 
-The project collects QA automation metrics using OpenTelemetry.
+The project collects QA automation metrics using OpenTelemetry and visualizes them through Prometheus and Grafana.
 
 Current metrics include:
 
@@ -202,8 +207,25 @@ These metrics provide visibility into:
 - Total test executions
 - Passed tests
 - Failed tests
+- Test pass rate
 - Test execution duration
 - Failure rates
+
+The current Grafana dashboard displays:
+
+```text
+Playwright Tests — Total: 3
+
+Playwright Tests — Passed: 1
+
+Playwright Tests — Failed: 2
+
+Playwright Pass Rate: 33.3%
+
+Average Playwright Test Duration: 4.43 s
+```
+
+This creates a visual QA observability layer on top of the automated test telemetry.
 
 ---
 
@@ -228,6 +250,25 @@ Status: ERROR
 ```
 
 Error information can also be attached to the span, allowing failed automated tests to be investigated through observability tooling.
+
+AI-generated failure analysis is also exported as trace data.
+
+Example:
+
+```text
+ai-analysis: Intentional failing test for observability
+```
+
+AI-analysis traces can contain structured attributes including:
+
+```text
+ai.failure.category
+ai.failure.root_cause
+ai.failure.expected
+ai.failure.actual
+```
+
+This allows AI investigation results to become part of the observability evidence.
 
 ---
 
@@ -254,6 +295,12 @@ Structured Root Cause Analysis
        |
        v
 analyses.json
+       |
+       v
+OpenTelemetry Trace
+       |
+       v
+Jaeger
 ```
 
 The AI returns structured information for each failure:
@@ -396,7 +443,6 @@ Current artifacts include:
 
 ```text
 playwright-test-results
-
 ai-failure-analysis
 ```
 
@@ -481,6 +527,8 @@ This initial experiment evolved into the current automated QA observability and 
 - OTLP
 - OpenTelemetry Collector
 - Jaeger
+- Prometheus
+- Grafana
 
 ## Infrastructure
 
@@ -514,11 +562,17 @@ AI-QA-Observability-Agent/
 │       └── playwright.yml
 │
 ├── docs/
+│   ├── screenshots/
+│   │   ├── grafana-playwright-dashboard.png
+│   │   ├── jaeger-ai-analysis-trace.png
+│   │   └── github-actions-ai-qa-report.png
+│   │
 │   ├── 01-project-setup.md
 │   ├── 02-observability-basics.md
 │   ├── 03-opentelemetry-setup.md
 │   ├── 04-docker-jaeger-setup.md
 │   ├── 05-first-trace.md
+│   ├── 06-opentelemetry-metrics.md
 │   └── 07-ai-failure-analysis.md
 │
 ├── failure-analysis/
@@ -602,6 +656,8 @@ test-results/
 - [x] Generate suggested corrective actions
 - [x] Analyze multiple failures
 - [x] Save structured AI results
+- [x] Export AI analysis as OpenTelemetry traces
+- [x] Visualize AI analysis traces in Jaeger
 
 ## Phase 6 — CI/CD
 
@@ -616,11 +672,14 @@ test-results/
 
 ## Phase 7 — Observability Dashboard
 
-- [ ] Add Grafana
-- [ ] Build QA observability dashboard
-- [ ] Visualize test pass/failure rates
-- [ ] Visualize test duration
-- [ ] Visualize failure trends
+- [x] Add Prometheus
+- [x] Add Grafana
+- [x] Build QA observability dashboard
+- [x] Visualize total test executions
+- [x] Visualize passed tests
+- [x] Visualize failed tests
+- [x] Visualize test pass rate
+- [x] Visualize average test duration
 
 ## Phase 8 — Advanced AI QA Agent
 
@@ -651,6 +710,7 @@ Examples include:
 - Preserving Playwright failure status while still executing AI analysis
 - Handling intentionally failed tests in GitHub Actions
 - Preserving test evidence as CI artifacts
+- Configuring Prometheus and Grafana visualization
 
 Troubleshooting is part of the project because observability is fundamentally about understanding and diagnosing system behavior.
 
@@ -670,6 +730,12 @@ Install Playwright Chromium:
 npx playwright install chromium
 ```
 
+Start the observability infrastructure:
+
+```bash
+docker compose up -d
+```
+
 Run the Playwright tests:
 
 ```bash
@@ -686,12 +752,6 @@ Generate the QA summary:
 
 ```bash
 node failure-analysis/generate-summary.js
-```
-
-Start the observability infrastructure:
-
-```bash
-docker compose up -d
 ```
 
 ---
@@ -725,6 +785,8 @@ This project demonstrates practical experience with:
 - Metrics and distributed tracing
 - OTLP
 - Jaeger
+- Prometheus
+- Grafana
 - Docker
 - CI/CD
 - GitHub Actions
@@ -734,6 +796,43 @@ This project demonstrates practical experience with:
 - AI-assisted root-cause analysis
 - Automated QA reporting
 - Observability-driven testing
+
+---
+
+# 📸 Project Screenshots
+
+The following screenshots demonstrate the current end-to-end AI QA observability pipeline, including automated testing, telemetry visualization, AI-assisted failure analysis, and CI/CD reporting.
+
+## Grafana — Playwright Test Observability Dashboard
+
+Grafana visualizes telemetry generated during Playwright test execution, including total tests, passed tests, failed tests, pass rate, and average test duration.
+
+![Grafana Playwright Test Observability Dashboard](docs/screenshots/grafana-playwright-dashboard.png)
+
+## Jaeger — AI Failure Analysis Trace
+
+AI-generated failure analysis is recorded as OpenTelemetry traces and exported through the OpenTelemetry Collector to Jaeger.
+
+The trace contains structured attributes such as the failure category, expected result, actual result, and probable root cause.
+
+![Jaeger AI Failure Analysis Trace](docs/screenshots/jaeger-ai-analysis-trace.png)
+
+## GitHub Actions — AI QA CI Pipeline
+
+GitHub Actions executes the Playwright test suite and continues the observability and AI-analysis pipeline even when intentional test failures occur.
+
+The workflow:
+
+- Runs Playwright tests
+- Captures test failures
+- Generates AI-assisted failure analysis
+- Publishes the AI QA test summary
+- Uploads test and analysis artifacts
+- Preserves the original Playwright test result as the final CI status
+
+The red workflow status shown below is expected because the project currently includes intentional failing tests used to validate the observability and failure-analysis pipeline.
+
+![GitHub Actions AI QA Report](docs/screenshots/github-actions-ai-qa-report.png)
 
 ---
 
@@ -753,14 +852,14 @@ Observability Reporter
       +-------------------+
       |                   |
       v                   v
-Telemetry              Failures
+ Telemetry             Failures
       |                   |
       v                   v
 OpenTelemetry          AI Analysis
       |                   |
       v                   v
-Observability       Root Cause
-Platform            Analysis
+Observability        Root Cause
+Platform             Analysis
       |                   |
       +---------+---------+
                 |
@@ -768,7 +867,7 @@ Platform            Analysis
         AI QA Investigation
                 |
                 v
-        Suggested Action
+         Suggested Action
                 |
                 v
          Automated Retest
@@ -780,10 +879,10 @@ Platform            Analysis
 
 **Active development**
 
-Current milestone:
+### Current milestone
 
-> Playwright automation, OpenTelemetry instrumentation, AI-powered multi-failure analysis, GitHub Actions CI/CD, dynamic QA reporting, and CI artifact preservation are operational.
+> Playwright automation, OpenTelemetry instrumentation, Prometheus metrics, Grafana dashboards, Jaeger tracing, AI-powered multi-failure analysis, GitHub Actions CI/CD, dynamic QA reporting, and CI artifact preservation are operational.
 
-Next milestone:
+### Next milestone
 
-> Build the visualization layer for QA metrics and failure trends, then expand the AI analyzer toward a more complete autonomous QA investigation agent.
+> Correlate traces, metrics, test failures, and historical execution data to evolve the project toward a more complete AI QA investigation agent.
