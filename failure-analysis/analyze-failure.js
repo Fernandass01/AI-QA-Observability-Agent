@@ -9,39 +9,73 @@ const {
     SpanStatusCode,
 } = require("@opentelemetry/api");
 
+// --------------------------------------------------
+// LOAD ENVIRONMENT VARIABLES
+// --------------------------------------------------
+
 require("dotenv").config({
-    path: path.join(__dirname, "..", ".env.local"),
+    path: path.join(
+        __dirname,
+        "..",
+        ".env.local"
+    ),
 });
 
 if (!process.env.OPENAI_API_KEY) {
     throw new Error(
-        "OPENAI_API_KEY was not found in .env.local"
+        "OPENAI_API_KEY was not found in the environment."
     );
 }
+
+// --------------------------------------------------
+// OPENAI CLIENT
+// --------------------------------------------------
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
 });
 
+// --------------------------------------------------
+// OPENTELEMETRY TRACER
+// --------------------------------------------------
+
 const tracer = trace.getTracer(
     "ai-qa-failure-analyzer"
 );
+
+// --------------------------------------------------
+// FAILURE INPUT
+// --------------------------------------------------
 
 const failuresPath = path.join(
     __dirname,
     "failures.json"
 );
 
+if (!fs.existsSync(failuresPath)) {
+    throw new Error(
+        `Failure file not found: ${failuresPath}`
+    );
+}
+
 const failures = JSON.parse(
-    fs.readFileSync(failuresPath, "utf8")
+    fs.readFileSync(
+        failuresPath,
+        "utf8"
+    )
 );
+
+// --------------------------------------------------
+// ANALYZE ONE FAILURE
+// --------------------------------------------------
 
 async function analyzeSingleFailure(failure) {
 
-    const response = await openai.responses.create({
-        model: "gpt-5.4",
+    const response =
+        await openai.responses.create({
+            model: "gpt-5.4",
 
-        input: `
+            input: `
 You are a senior QA automation engineer.
 
 Analyze the following Playwright automated test failure.
@@ -58,28 +92,59 @@ ${failure.durationMs} ms
 Playwright Error:
 ${failure.errorMessage}
 
-Return ONLY valid JSON with this exact structure:
+Your task is to identify:
+
+1. The failure category.
+2. The probable root cause.
+3. The expected result.
+4. The actual result.
+5. The recommended action.
+6. A concrete proposed fix.
+
+The proposedFix should be specific enough for a QA engineer
+to understand what code or assertion could be changed.
+
+Do NOT modify any source code.
+Do NOT claim that a fix has already been applied.
+Only recommend the change.
+
+Return ONLY valid JSON.
+
+Use this exact structure:
 
 {
   "failureCategory": "",
   "rootCause": "",
   "expected": "",
   "actual": "",
-  "suggestedAction": ""
+  "suggestedAction": "",
+  "proposedFix": ""
 }
 `,
-    });
+        });
 
     return JSON.parse(
         response.output_text
     );
 }
 
+// --------------------------------------------------
+// ANALYZE ALL FAILURES
+// --------------------------------------------------
+
 async function analyzeFailures() {
 
-    console.log("\n==============================");
-    console.log("AI QA FAILURE ANALYSIS");
-    console.log("==============================");
+    console.log(
+        "\n=============================="
+    );
+
+    console.log(
+        "AI QA FAILURE ANALYSIS"
+    );
+
+    console.log(
+        "=============================="
+    );
 
     const analyses = [];
 
@@ -90,7 +155,9 @@ async function analyzeFailures() {
         );
 
         const analysis =
-            await analyzeSingleFailure(failure);
+            await analyzeSingleFailure(
+                failure
+            );
 
         const combinedResult = {
             testName: failure.testName,
@@ -99,7 +166,9 @@ async function analyzeFailures() {
             ...analysis,
         };
 
-        analyses.push(combinedResult);
+        analyses.push(
+            combinedResult
+        );
 
         console.log(
             JSON.stringify(
@@ -109,13 +178,14 @@ async function analyzeFailures() {
             )
         );
 
-        // -------------------------
-        // AI ANALYSIS TRACE
-        // -------------------------
+        // ------------------------------------------
+        // AI ANALYSIS OPENTELEMETRY TRACE
+        // ------------------------------------------
 
-        const analysisSpan = tracer.startSpan(
-            `ai-analysis: ${failure.testName}`
-        );
+        const analysisSpan =
+            tracer.startSpan(
+                `ai-analysis: ${failure.testName}`
+            );
 
         analysisSpan.setAttribute(
             "ai.failure.test_name",
@@ -124,27 +194,38 @@ async function analyzeFailures() {
 
         analysisSpan.setAttribute(
             "ai.failure.category",
-            analysis.failureCategory
+            analysis.failureCategory ||
+                "Unknown"
         );
 
         analysisSpan.setAttribute(
             "ai.failure.root_cause",
-            analysis.rootCause
+            analysis.rootCause ||
+                "Unknown"
         );
 
         analysisSpan.setAttribute(
             "ai.failure.expected",
-            analysis.expected
+            analysis.expected ||
+                "Unknown"
         );
 
         analysisSpan.setAttribute(
             "ai.failure.actual",
-            analysis.actual
+            analysis.actual ||
+                "Unknown"
         );
 
         analysisSpan.setAttribute(
             "ai.failure.suggested_action",
-            analysis.suggestedAction
+            analysis.suggestedAction ||
+                "Unknown"
+        );
+
+        analysisSpan.setAttribute(
+            "ai.failure.proposed_fix",
+            analysis.proposedFix ||
+                "Unknown"
         );
 
         analysisSpan.setStatus({
@@ -153,6 +234,10 @@ async function analyzeFailures() {
 
         analysisSpan.end();
     }
+
+    // --------------------------------------------------
+    // SAVE ANALYSIS RESULTS
+    // --------------------------------------------------
 
     const analysesPath = path.join(
         __dirname,
@@ -172,24 +257,47 @@ async function analyzeFailures() {
         `\n[AI-QA] ${analyses.length} analysis result(s) saved: ${analysesPath}`
     );
 
-   try {
+    // --------------------------------------------------
+    // OPENTELEMETRY SHUTDOWN
+    // --------------------------------------------------
+
+    // Telemetry export may not be available in every
+    // environment, especially GitHub-hosted runners.
+    // AI analysis should remain successful even if
+    // telemetry export is unavailable.
+
+    try {
+
         await sdk.shutdown();
 
         console.log(
             "[OTEL] AI analysis traces export complete"
         );
+
     } catch (error) {
+
         console.warn(
             "[OTEL] Trace export unavailable. AI analysis completed successfully."
+        );
+
+        console.warn(
+            `[OTEL] ${error.message}`
         );
     }
 }
 
-analyzeFailures().catch((error) => {
-    console.error(
-        "AI analysis failed:",
-        error.message
-    );
+// --------------------------------------------------
+// START ANALYSIS
+// --------------------------------------------------
 
-    process.exitCode = 1;
-});
+analyzeFailures().catch(
+    (error) => {
+
+        console.error(
+            "AI analysis failed:",
+            error.message
+        );
+
+        process.exitCode = 1;
+    }
+);

@@ -15,3 +15,5 @@ failure-analysis/failures.json
 failure-analysis/analyses.json
 
 failure-analysis/test-summary.json
+
+tests/ai-validation/
