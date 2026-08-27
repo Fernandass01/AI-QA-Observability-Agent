@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+
   pull_request:
     branches:
       - main
@@ -39,9 +40,15 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: node failure-analysis/analyze-failure.js
 
+      - name: Validate AI proposed fixes
+        if: always()
+        run: node failure-analysis/validate-proposed-fix.js
+        continue-on-error: true
+
       - name: Publish AI analysis summary
         if: always()
         run: node failure-analysis/generate-summary.js
+
       - name: Upload Playwright test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -58,7 +65,9 @@ jobs:
           path: |
             failure-analysis/failures.json
             failure-analysis/analyses.json
+            failure-analysis/test-summary.json
           if-no-files-found: ignore
+
       - name: Fail workflow if Playwright tests failed
         if: steps.playwright.outcome == 'failure'
         run: exit 1
